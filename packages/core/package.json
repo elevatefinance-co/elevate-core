@@ -1,0 +1,91 @@
+{
+  "name": "@elevatefinance-co/india-tax-rules",
+  "version": "0.1.0",
+  "description": "Typed, tested, citation-first TypeScript implementation of Indian tax rules -- Income Tax (ITR), GST (Offering A), and Income-Tax TDS (Offering B). Zero deps. AY-versioned and effective-date-versioned.",
+  "keywords": [
+    "india",
+    "tax",
+    "income-tax",
+    "itr",
+    "gst",
+    "tds",
+    "rules-as-code",
+    "typescript"
+  ],
+  "homepage": "https://docs.elevatefinance.co",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/elevatefinance-co/elevate-core.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/elevatefinance-co/elevate-core/issues"
+  },
+  "license": "MIT",
+  "author": "ElevateFinance",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./citations": {
+      "types": "./dist/citations/index.d.ts",
+      "import": "./dist/citations/index.js"
+    },
+    "./slabs": {
+      "types": "./dist/slabs/index.d.ts",
+      "import": "./dist/slabs/index.js"
+    },
+    "./capital-gains": {
+      "types": "./dist/capital-gains/index.d.ts",
+      "import": "./dist/capital-gains/index.js"
+    },
+    "./deductions": {
+      "types": "./dist/deductions/index.d.ts",
+      "import": "./dist/deductions/index.js"
+    },
+    "./rsu-perquisite": {
+      "types": "./dist/rsu-perquisite/index.d.ts",
+      "import": "./dist/rsu-perquisite/index.js"
+    },
+    "./gst": {
+      "types": "./dist/gst/index.d.ts",
+      "import": "./dist/gst/index.js"
+    },
+    "./tds": {
+      "types": "./dist/tds/index.d.ts",
+      "import": "./dist/tds/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  },
+  "devDependencies": {
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
+    "@vitest/coverage-v8": "^4.1.8",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.8"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "engines": {
+    "node": ">=22.22.3"
+  }
+}

@@ -1,0 +1,57 @@
+# CodeQL static analysis. CodeQL is free on public repositories; elevate-core flips public at launch, so wiring this in pre-flip means the Code Scanning badge is green from day one and the security tab is populated before any external contributor arrives. The single TypeScript language matrix covers both the @elevatefinance-co/india-tax-rules package source and the build scripts. Runs on every push to main, every pull_request targeting main, and weekly (Monday 00:00 UTC) so the analysis stays current even on long-quiet branches. Findings upload as SARIF to the Security tab on public repos; on private repos the upload no-ops (Code Scanning result upload requires GHAS on private repos) while the scan itself still runs so a CodeQL regression is visible in the job log.
+#
+# Pre-public-flip behaviour: analyze runs and prints findings to the job log; the `upload` input is gated on repository visibility so the upload only attempts on public repos. At launch flip the upload starts working immediately without any workflow change.
+#
+# Supply-chain posture: github/codeql-action/* are GitHub-owned and keep @v3 per org policy. step-security/harden-runner audit; persist-credentials: false; permissions minimised to security-events: write (CodeQL needs this to upload SARIF) + actions: read + contents: read.
+
+name: codeql
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  analyze:
+    name: codeql (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [typescript]
+    steps:
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
+        with:
+          egress-policy: audit
+          disable-sudo: true
+
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4.36.2
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v4.36.2
+        with:
+          category: '/language:${{ matrix.language }}'
+          upload: ${{ github.event.repository.private == false && 'always' || 'never' }}

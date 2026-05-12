@@ -1,0 +1,19 @@
+# CODEOWNERS for elevate-core. Every entry below requires review from the listed owner(s) before a PR can merge. Order matters: a file matches the last pattern that covers it. The repository admin maps the @Priyesh-ElevateFinance handle to the GitHub user or team account.
+
+/*.json                              @Priyesh-ElevateFinance
+/*.mjs                               @Priyesh-ElevateFinance
+/*.ts                                @Priyesh-ElevateFinance
+/*.js                                @Priyesh-ElevateFinance
+/*.cjs                               @Priyesh-ElevateFinance
+/package.json                        @Priyesh-ElevateFinance
+/pnpm-lock.yaml                      @Priyesh-ElevateFinance
+/pnpm-workspace.yaml                 @Priyesh-ElevateFinance
+/tsconfig.base.json                  @Priyesh-ElevateFinance
+/.gitleaks.toml                      @Priyesh-ElevateFinance
+/.nvmrc                              @Priyesh-ElevateFinance
+/commitlint.config.cjs               @Priyesh-ElevateFinance
+/renovate.json                       @Priyesh-ElevateFinance
+/.github/                            @Priyesh-ElevateFinance
+/.husky/                             @Priyesh-ElevateFinance
+/.changeset/                         @Priyesh-ElevateFinance
+/packages/core/                      @Priyesh-ElevateFinance
