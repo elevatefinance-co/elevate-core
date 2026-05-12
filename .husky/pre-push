@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+# Pre-push hook. Runs the fast local static-check gate before any push to a remote: typecheck plus lint. The vitest suite and Stryker mutation pass are owned by the CI pr-gate workflow (the authoritative single run per change). Never bypass via --no-verify; fix the underlying issue first.
+
+export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.nvm/versions/node/v24.15.0/bin:$HOME/.nvm/versions/node/v22.22.1/bin:$PATH"
+
+set -e
+
+pnpm typecheck
+pnpm lint

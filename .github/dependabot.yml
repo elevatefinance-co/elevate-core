@@ -1,0 +1,18 @@
+# Dependabot config: complements Renovate, no overlap. Renovate (configured via renovate.json) owns the npm + Cargo update lanes. Dependabot here owns the GitHub Actions ecosystem only -- it tracks every `uses: owner/action@vN` reference in .github/workflows/ and .github/actions/ and opens a PR when a new release ships. Splitting the two bots by ecosystem keeps the PR queue clean and prevents double-PRs against the same dependency.
+
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '09:00'
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+      include: scope
+    labels:
+      - dependencies
+      - github-actions
