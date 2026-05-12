@@ -24,7 +24,7 @@ jobs:
       - name: enable corepack on the runner's pre-installed Node so pnpm is on PATH before setup-node@v5 validates the packageManager field
         run: corepack enable
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v6
         with:
           node-version: '24'
           registry-url: https://registry.npmjs.org
