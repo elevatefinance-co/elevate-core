@@ -1,0 +1,32 @@
+#!/usr/bin/env sh
+# Pre-commit hook chain. Four stages in order: gitleaks secret scan (hard fail on a detected secret; skipped with a warning when the binary is not on PATH), lint-staged (prettier --write + eslint --fix on staged TypeScript files, re-staged automatically), character-set audit (pure 7-bit GSM-7 across every source / config / docs file; test files exempt for deliberate Unicode behaviour where present), and project-wide tsc --noEmit. Homebrew + nvm paths are prepended because IDE / GUI git clients often launch hooks with a minimal PATH that omits them. Never bypass via --no-verify.
+
+export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.nvm/versions/node/v24.15.0/bin:$HOME/.nvm/versions/node/v22.22.1/bin:$PATH"
+
+set -e
+
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks git --pre-commit --staged --no-banner --redact --config .gitleaks.toml
+else
+  printf 'warn: gitleaks not installed, skipping secret scan.\n'
+  printf '      install via `brew install gitleaks` to enable the pre-commit check.\n'
+fi
+
+pnpm exec lint-staged --concurrent 1
+
+staged_charset_targets=$(git diff --cached --name-only --diff-filter=ACMR \
+  | grep -E '\.(ts|js|mjs|cjs|json|yml|yaml|md)$' \
+  | grep -v '^packages/core/test/' \
+  || true)
+if [ -n "$staged_charset_targets" ]; then
+  charset_violations=$(echo "$staged_charset_targets" \
+    | xargs -I '{}' sh -c 'LC_ALL=C grep -l -P "[^\x09\x0A\x0D\x20-\x7E]" "{}" 2>/dev/null' \
+    || true)
+  if [ -n "$charset_violations" ]; then
+    printf 'error: non-GSM-7 / non-printable-ASCII characters in staged files:\n'
+    echo "$charset_violations"
+    exit 1
+  fi
+fi
+
+pnpm typecheck

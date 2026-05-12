@@ -1,0 +1,76 @@
+# Conventional Commits validation. Re-runs commitlint against every commit in the PR plus the squash-merge subject composed from the PR title, and against every commit on a direct push (including a force-push to a re-squashed branch). The PR title is passed to the shell via the PR_TITLE env var rather than direct ${{ }} interpolation so a malicious title cannot inject shell commands into the runner (workflow-injection hardening). The push-context block probes whether github.event.before is still reachable; on a force-push to a re-squashed branch the previous tip is dangling, so the workflow falls back to validating the new HEAD commit only.
+#
+# Supply-chain posture: harden-runner audit; persist-credentials: false; concurrency group cancels stale runs on rapid amend-pushes (small DoS / cost prevention); permissions minimised to contents: read with pull-requests: read for the title.
+
+name: pr-conventional-commits
+
+# AUTO-TRIGGERS DISABLED during the testing-phase commit churn. Local husky commit-msg hook enforces
+# Conventional Commits on every git commit; this workflow is the CI backup, manually runnable via
+# `gh workflow run pr-conventional-commits.yml --repo elevatefinance-co/elevate-core`. To re-enable
+# for deployment, delete the `workflow_dispatch:` line below and uncomment the `pull_request:` + `push:` blocks.
+on:
+  workflow_dispatch:
+  # pull_request:
+  #   branches: [main]
+  # push:
+  #   branches: [main]
+
+concurrency:
+  group: pr-conv-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  pull-requests: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  validate-commits:
+    name: pr-conventional-commits
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+          disable-sudo: true
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-elevate-core
+      - name: validate every commit in the PR plus the squash-merge subject from the PR title (PR context)
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          pnpm exec commitlint --from "$PR_BASE_SHA" --to "$PR_HEAD_SHA"
+          printf '%s\n' "$PR_TITLE" | pnpm exec commitlint
+      - name: validate the new commits relative to the previous push state (push context; resilient to force-push and orphan-root pushes)
+        if: github.event_name == 'push'
+        env:
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
+        run: |
+          set -euo pipefail
+          zero='0000000000000000000000000000000000000000'
+          has_parent() { git rev-parse --verify HEAD~1 >/dev/null 2>&1; }
+          validate_range() { pnpm exec commitlint --from "$1" --to HEAD; }
+          validate_head_only() { git log -1 --format='%B' HEAD | pnpm exec commitlint; }
+          if [ "$PUSH_BEFORE" = "$zero" ] || ! git cat-file -e "$PUSH_BEFORE^{commit}" 2>/dev/null; then
+            if has_parent; then
+              echo "Previous tip is unreachable or new branch; validating HEAD~1..HEAD."
+              validate_range HEAD~1
+            else
+              echo "Previous tip is unreachable and HEAD is the root commit; validating HEAD message only."
+              validate_head_only
+            fi
+          else
+            validate_range "$PUSH_BEFORE"
+          fi
