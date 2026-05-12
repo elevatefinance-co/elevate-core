@@ -1,0 +1,104 @@
+# Supply-chain guard workflow. Three jobs designed to catch a future dependency or lockfile
+# attack BEFORE it reaches the published @elevatefinance-co/india-tax-rules package. (1) OSV-
+# Scanner queries the Google OSV.dev cross-ecosystem database for known vulnerabilities in the
+# resolved lockfile. (2) lockfile-lint validates registry pinning + integrity hashes. (3)
+# install-scripts-audit: elevate-core has no pnpm-workspace.yaml `allowBuilds:` block (it has
+# zero install-script-carrying deps today); the audit step fails CI if a new transitive ever
+# carries a postinstall, which is the most common npm supply-chain compromise vector.
+#
+# AUTO-TRIGGERS DISABLED during the testing-phase commit churn -- billing safety. To re-enable
+# for deployment, delete the `workflow_dispatch:` block below and uncomment the `pull_request`
+# + `schedule` blocks.
+#
+# Supply-chain posture: SHA-pinned actions, harden-runner audit mode, persist-credentials:
+# false, minimum permissions per job.
+
+name: supply-chain-guard
+
+on:
+  workflow_dispatch:
+  # pull_request:
+  #   branches: [main]
+  #   paths:
+  #     - 'package.json'
+  #     - 'pnpm-lock.yaml'
+  #     - 'pnpm-workspace.yaml'
+  #     - 'packages/*/package.json'
+  # schedule:
+  #   - cron: '0 6 * * 1'
+
+concurrency:
+  group: supply-chain-guard-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  osv-scan:
+    name: OSV-Scanner (lockfile CVEs)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: google/osv-scanner-action/osv-scanner-action@e69cc6c86b31f1e7e23935bbe7031b50e51082de # v2.0.2
+        with:
+          scan-args: |-
+            --format=sarif
+            --output=results.sarif
+            --lockfile=pnpm-lock.yaml
+        continue-on-error: false
+      - name: Upload OSV-Scanner SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@1a25c54ea69bb3e1b4b8b35b15b8c0f02f6e8a4a # v3.27.6
+        with:
+          sarif_file: results.sarif
+
+  lockfile-lint:
+    name: lockfile-lint (registry + integrity)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-elevate-core
+      - run: |
+          pnpm dlx lockfile-lint --path pnpm-lock.yaml --allowed-hosts npm --validate-https --validate-integrity
+
+  install-scripts-audit:
+    name: install-scripts-audit (zero-postinstall posture)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@a5ad31d6a139d249332a2605b85202e8c0b78450 # v2.19.1
+        with:
+          egress-policy: audit
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - name: Fail if any package carries an install script
+        run: |
+          set -euo pipefail
+          if grep -E "^[[:space:]]*hasInstallScript: true" pnpm-lock.yaml >/dev/null; then
+            echo "::error::elevate-core lockfile now contains a package with an install script (preinstall/install/postinstall). This is the dominant supply-chain attack vector. Review the new dependency before merging."
+            grep -B2 "hasInstallScript: true" pnpm-lock.yaml | head -50
+            exit 1
+          fi
+          echo "Zero install-script-carrying packages in the lockfile -- posture maintained."

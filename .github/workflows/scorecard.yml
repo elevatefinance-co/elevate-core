@@ -1,0 +1,67 @@
+# OSSF Scorecard. Scores the repository against the open-source security best-practices framework (token-permissions, branch-protection, code-review, dangerous-workflow, pinned-dependencies, sast, signed-releases, vulnerabilities, etc.). Publishes a badge consumable from README.md and uploads results as SARIF to the Security tab.
+#
+# Visibility gate: Scorecard is designed for PUBLIC repositories. On a private repo its GraphQL ListCommits query fails with "Resource not accessible by integration" because the default GITHUB_TOKEN cannot enumerate private-repo commit history without GHAS. The entire job is gated on `github.event.repository.private == false` so the workflow file is present (Scorecard starts working the moment the repo flips public at launch) without producing a permanently-red run pre-flip.
+#
+# Trigger cadence: weekly Monday 00:30 UTC + every push to main (catches regressions immediately). Pull-request runs are intentionally skipped because Scorecard is a posture audit, not a per-PR gate.
+#
+# Supply-chain posture: ossf/scorecard-action is pinned to a 40-char commit SHA. step-security/harden-runner audit; persist-credentials: false; permissions minimised to the SARIF upload + the id-token Scorecard's signing-attestation step requires.
+
+name: scorecard
+
+# AUTO-TRIGGERS DISABLED during the testing-phase commit churn. Manually runnable via
+# `gh workflow run scorecard.yml --repo elevatefinance-co/elevate-core` (will still skip on private
+# repo via the visibility gate on the job). To re-enable for deployment, uncomment the `push:` and
+# `schedule:` blocks below.
+on:
+  workflow_dispatch:
+  # push:
+  #   branches: [main]
+  # schedule:
+  #   - cron: '30 0 * * 1'
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  scorecard:
+    name: scorecard analysis
+    if: github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      security-events: write
+      id-token: write
+      contents: read
+      actions: read
+    steps:
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411 # v2.19.4
+        with:
+          egress-policy: audit
+          disable-sudo: true
+
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+
+      - name: upload Scorecard SARIF to the Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: results.sarif
+
+      - name: upload Scorecard SARIF as a workflow artefact for triage
+        uses: actions/upload-artifact@v5
+        with:
+          name: scorecard-sarif
+          path: results.sarif
+          retention-days: 30

@@ -1,0 +1,15 @@
+packages:
+  - 'packages/*'
+
+overrides:
+  # qs 6.15.2 (latest at 2026-05-26) patches GHSA-prc3-vjfx-vhm9 (DoS:
+  # qs.stringify crashes with TypeError on null/undefined entries in
+  # comma-format arrays when encodeValuesOnly is set). Lockfile resolved
+  # 6.15.1 which is also post-patch (advisory range < 6.14.0), but the
+  # explicit override forces Dependabot to re-evaluate the alert against
+  # the patched range and prevents a future transitive consumer from
+  # pulling a vulnerable 6.13.x. qs reaches this repo only through the
+  # devDependency chain (vitest / stryker / their test-utility transitives);
+  # never in the published package surface. Zero-vuln posture per the
+  # ElevateFinance standing rule.
+  qs: ^6.15.2

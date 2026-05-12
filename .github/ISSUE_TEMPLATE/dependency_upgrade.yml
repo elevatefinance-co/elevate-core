@@ -1,0 +1,54 @@
+name: Dependency upgrade candidate
+description: Track a candidate dependency upgrade that satisfies the safe-stable definition. Renovate opens these automatically; humans can also file them.
+title: 'chore(deps): upgrade <package> from <current> to <latest>'
+labels: ['dependency-upgrade-candidate', 'automated', 'awaiting-review']
+body:
+  - type: input
+    id: package
+    attributes:
+      label: Package name
+    validations:
+      required: true
+  - type: input
+    id: current
+    attributes:
+      label: Current version (manifest range)
+    validations:
+      required: true
+  - type: input
+    id: latest
+    attributes:
+      label: Latest stable version on the `latest` dist-tag
+    validations:
+      required: true
+  - type: dropdown
+    id: change_type
+    attributes:
+      label: Upgrade type
+      options:
+        - patch
+        - minor
+        - major
+    validations:
+      required: true
+  - type: checkboxes
+    id: safe_stable
+    attributes:
+      label: Safe-stable proof (all must hold)
+      options:
+        - label: Listed under the `latest` dist-tag (no `next`, `beta`, `rc`, `canary`).
+          required: true
+        - label: Published 14+ days ago.
+          required: true
+        - label: No `deprecated` field.
+          required: true
+        - label: No advisory at moderate-or-above.
+          required: true
+        - label: Repository commit within the last 12 months.
+          required: true
+  - type: textarea
+    id: changelog
+    attributes:
+      label: Changelog summary
+    validations:
+      required: true

@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+# Commit-message hook. Validates the message against commitlint.config.cjs before the commit is recorded. If the message is not Conventional Commits, the commit is aborted. Never bypass via --no-verify; fix the message and `git commit` again.
+
+export PATH="/opt/homebrew/bin:/usr/local/bin:$HOME/.nvm/versions/node/v24.15.0/bin:$HOME/.nvm/versions/node/v22.22.1/bin:$PATH"
+
+pnpm exec commitlint --edit "$1"
