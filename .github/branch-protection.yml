@@ -22,7 +22,6 @@ branches:
         - eslint-disable-audit
         - stryker-disable-audit
         - ts-ignore-audit
-        - gitleaks
         - trufflehog
         - codeql
         - semgrep

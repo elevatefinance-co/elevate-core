@@ -58,6 +58,12 @@ function parseScalar(text) {
   if (text === 'null') return null;
   if (/^-?\d+$/.test(text)) return Number.parseInt(text, 10);
   if (text.startsWith('"') && text.endsWith('"')) return text.slice(1, -1);
+  if (text.startsWith("'") && text.endsWith("'")) return text.slice(1, -1);
+  if (text.startsWith('[') && text.endsWith(']')) {
+    const inner = text.slice(1, -1).trim();
+    if (inner === '') return [];
+    return inner.split(',').map((item) => parseScalar(item.trim()));
+  }
   return text;
 }
 

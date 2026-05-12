@@ -1,4 +1,4 @@
-# PR security workflow. elevate-core ships open-source under MIT post-launch; license compliance is STRICT (any copyleft dependency fails the PR). Layered secret scanning (gitleaks plus TruffleHog), static analysis (Semgrep), and license compliance. CodeQL is not enabled here because Code Scanning result upload on a private repository requires the paid GitHub Advanced Security entitlement; semgrep with the OWASP Top Ten plus TypeScript plus JavaScript packs covers the same SAST surface and runs on every push. Semgrep is marked continue-on-error and uploads a SARIF artefact for triage so a single new advisory cannot wedge the merge queue. External forks run the same gate; the workflow uses pull_request (not pull_request_target) so fork code never gains write access to the repository.
+# PR security workflow. elevate-core ships open-source under MIT post-launch; license compliance is STRICT (any copyleft dependency fails the PR). Secret scanning (TruffleHog with verified-only filter), static analysis (Semgrep), and license compliance. The CI scanner pairs with the husky pre-commit gitleaks hook (runs locally before every push) and GitHub's native secret scanning (continuous repo-wide pattern matching on Team plan); three overlapping layers without paying for the gitleaks-action commercial license. CodeQL is not enabled here because Code Scanning result upload on a private repository requires the paid GitHub Advanced Security entitlement; semgrep with the OWASP Top Ten plus TypeScript plus JavaScript packs covers the same SAST surface and runs on every push. Semgrep is marked continue-on-error and uploads a SARIF artefact for triage so a single new advisory cannot wedge the merge queue. External forks run the same gate; the workflow uses pull_request (not pull_request_target) so fork code never gains write access to the repository.
 
 name: pr-security
 
@@ -18,17 +18,6 @@ permissions:
   pull-requests: read
 
 jobs:
-  gitleaks:
-    name: gitleaks
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
   trufflehog:
     name: trufflehog
     runs-on: ubuntu-latest
