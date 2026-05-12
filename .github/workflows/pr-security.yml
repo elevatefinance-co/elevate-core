@@ -22,7 +22,7 @@ jobs:
     name: trufflehog
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: trufflesecurity/trufflehog@main
@@ -39,7 +39,7 @@ jobs:
       image: returntocorp/semgrep
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: semgrep scan with the OWASP Top Ten plus TypeScript plus JavaScript packs (advisory until findings triaged)
         run: |
           semgrep scan \
@@ -64,7 +64,7 @@ jobs:
     name: license-check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/setup-elevate-core
       - name: STRICT license compliance for the MIT-licensed library
         run: |
