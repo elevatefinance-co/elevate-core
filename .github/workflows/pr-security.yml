@@ -1,0 +1,82 @@
+# PR security workflow. elevate-core ships open-source under MIT post-launch; license compliance is STRICT (any copyleft dependency fails the PR). Layered secret scanning (gitleaks plus TruffleHog), static analysis (Semgrep), and license compliance. CodeQL is not enabled here because Code Scanning result upload on a private repository requires the paid GitHub Advanced Security entitlement; semgrep with the OWASP Top Ten plus TypeScript plus JavaScript packs covers the same SAST surface and runs on every push. Semgrep is marked continue-on-error and uploads a SARIF artefact for triage so a single new advisory cannot wedge the merge queue. External forks run the same gate; the workflow uses pull_request (not pull_request_target) so fork code never gains write access to the repository.
+
+name: pr-security
+
+on:
+  pull_request:
+    branches: ['**']
+  push:
+    branches: ['**']
+
+concurrency:
+  group: pr-security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: read
+
+jobs:
+  gitleaks:
+    name: gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  trufflehog:
+    name: trufflehog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+          head: ${{ github.event.pull_request.head.sha || github.sha }}
+          extra_args: --only-verified
+
+  semgrep:
+    name: semgrep
+    runs-on: ubuntu-latest
+    container:
+      image: returntocorp/semgrep
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+      - name: semgrep scan with the OWASP Top Ten plus TypeScript plus JavaScript packs (advisory until findings triaged)
+        run: |
+          semgrep scan \
+            --config p/owasp-top-ten \
+            --config p/typescript \
+            --config p/javascript \
+            --sarif --output semgrep.sarif \
+            --metrics off \
+            --exclude node_modules \
+            --exclude dist \
+            --exclude coverage \
+            --exclude reports \
+            || true
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+          retention-days: 30
+
+  license-check:
+    name: license-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-elevate-core
+      - name: STRICT license compliance for the MIT-licensed library
+        run: |
+          pnpm dlx license-checker --production --onlyAllow "MIT;BSD-2-Clause;BSD-3-Clause;Apache-2.0;ISC;CC0-1.0;0BSD;Unlicense;MIT-0;Python-2.0" --excludePrivatePackages

@@ -1,0 +1,152 @@
+# PR gate workflow. The single PR-time enforcement that every PR passes before merge becomes possible. Every job below is a required status check on the main branch protection rule. The library has no Next, no Prisma, no Playwright; the gate runs typecheck, lint, format:check, the vitest test suite, the enforced 95-percent coverage gate, the pnpm audit gate, and every standards audit (character-set, comment-discipline, interface, eslint-disable, stryker-disable, ts-ignore). Each pnpm-driven job calls the .github/actions/setup-elevate-core composite which provisions Node 24 plus corepack-managed pnpm plus the pnpm-store cache plus the frozen-lockfile install; audit jobs that only grep the source tree skip the composite. External contributors from forks run the same gate.
+
+name: pr-gate
+
+on:
+  pull_request:
+    branches: ['**']
+  push:
+    branches: ['**']
+
+concurrency:
+  group: pr-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-elevate-core
+      - run: pnpm typecheck
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-elevate-core
+      - run: pnpm lint
+
+  format:
+    name: format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-elevate-core
+      - run: pnpm format:check
+
+  test-unit:
+    name: test-unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-elevate-core
+      - run: pnpm test
+
+  test-coverage:
+    name: test-coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-elevate-core
+      - run: pnpm -C packages/core test --coverage
+
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-elevate-core
+      - run: pnpm audit --audit-level=moderate
+
+  character-set-audit:
+    name: character-set-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: assert pure 7-bit GSM-7 ASCII outside intentional unicode test fixtures
+        run: |
+          set -e
+          violations=$(LC_ALL=C grep -rPln '[^\x09\x0A\x0D\x20-\x7E]' packages/core/src docs README.md *.md 2>/dev/null || true)
+          if [ -n "$violations" ]; then
+            echo "non-GSM-7 / non-printable-ASCII characters in:"
+            echo "$violations"
+            exit 1
+          fi
+
+  comment-discipline-audit:
+    name: comment-discipline-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: assert no // line comments in source
+        run: |
+          set -e
+          violations=$(grep -rnE "^[[:space:]]*//[^/]" packages/core/src 2>/dev/null | grep -vE "@ts-expect-error|stryker-disable" || true)
+          if [ -n "$violations" ]; then
+            echo "// line-comments in source files:"
+            echo "$violations"
+            exit 1
+          fi
+
+  interface-audit:
+    name: interface-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: |
+          set -e
+          violations=$(grep -rn "^interface " packages/core/src 2>/dev/null || true)
+          if [ -n "$violations" ]; then
+            echo "interface declarations:"
+            echo "$violations"
+            exit 1
+          fi
+
+  eslint-disable-audit:
+    name: eslint-disable-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: |
+          set -e
+          violations=$(grep -rn "eslint-disable" packages/core/src 2>/dev/null || true)
+          if [ -n "$violations" ]; then
+            echo "eslint-disable directives:"
+            echo "$violations"
+            exit 1
+          fi
+
+  stryker-disable-audit:
+    name: stryker-disable-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: |
+          set -e
+          violations=$(grep -rn "Stryker disable" packages/core/src 2>/dev/null || true)
+          if [ -n "$violations" ]; then
+            echo "Stryker disable directives:"
+            echo "$violations"
+            exit 1
+          fi
+
+  ts-ignore-audit:
+    name: ts-ignore-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: |
+          set -e
+          violations=$(grep -rn "@ts-ignore" packages/core/src 2>/dev/null || true)
+          if [ -n "$violations" ]; then
+            echo "@ts-ignore directives:"
+            echo "$violations"
+            exit 1
+          fi

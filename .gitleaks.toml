@@ -1,0 +1,16 @@
+# Gitleaks configuration for elevate-core. Extends the default ruleset
+# (AWS, GCP, Azure, Slack, GitHub tokens, etc.) with paths/patterns that
+# legitimately appear in this library repo.
+
+[extend]
+useDefault = true
+
+[allowlist]
+paths = [
+  '''^pnpm-lock\.yaml$''',
+  '''^packages/.+/dist/''',
+]
+regexes = [
+  '''test-[a-z-]+-secret''',
+  '''dev-only-.*''',
+]

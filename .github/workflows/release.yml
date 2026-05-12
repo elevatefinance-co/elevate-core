@@ -1,0 +1,52 @@
+# Release workflow. Triggered on every push to main while the repository is still closed-source: opens or refreshes the "Version Packages" PR that aggregates pending changesets so the version bumps stay current; npm publishing is intentionally NOT wired here. When elevate-core opens its source and the @elevatefinance-co scope is registered on the public npm registry with this repository listed as a trusted publisher (or NPM_TOKEN provisioned as a secret), add `publish: pnpm release` to the changesets action input below and the workflow will start publishing on every merge of the version PR. Uses corepack-managed pnpm at the version pinned in package.json packageManager so the runner cannot drift from the maintainer's pnpm version; the actions/setup-node step also configures the npm registry URL so the future publish call carries the correct authentication context.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: enable corepack on the runner's pre-installed Node so pnpm is on PATH before setup-node@v5 validates the packageManager field
+        run: corepack enable
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+
+      - name: enable corepack on the freshly-provisioned Node 24 toolchain
+        run: corepack enable
+
+      - name: cache the pnpm store keyed off pnpm-lock.yaml
+        uses: actions/cache@v5
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: pnpm install with frozen lockfile
+        run: pnpm install --frozen-lockfile
+
+      - name: Create or refresh the Version Packages PR (publish path stays disabled until the repository opens its source)
+        uses: changesets/action@v1
+        with:
+          version: pnpm version
+          commit: 'chore(release): version packages'
+          title: 'chore(release): version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
