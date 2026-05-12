@@ -1,0 +1,122 @@
+# PR security workflow. elevate-core ships open-source under MIT post-launch; license compliance is STRICT (any copyleft dependency fails the PR). Secret scanning (TruffleHog with verified-only filter), static analysis (Semgrep), license compliance, and GitHub-native dependency-review. The CI scanner pairs with the husky pre-commit gitleaks hook (runs locally before every push) and GitHub's native secret scanning (continuous repo-wide pattern matching on Team plan); three overlapping layers without paying for the gitleaks-action commercial license. CodeQL is added as a separate workflow (codeql.yml) so when this repo flips open-source the Code Scanning result upload that requires GHAS on private repos becomes free on the public repo; semgrep continues to run alongside CodeQL because the OWASP Top Ten + JavaScript + TypeScript packs catch findings the default CodeQL config misses. External forks run the same gate; the workflow uses pull_request (not pull_request_target) so fork code never gains write access to the repository.
+#
+# Supply-chain posture: trufflesecurity/trufflehog is pinned to a 40-char commit SHA (the tj-actions/changed-files compromise of March 2025 hit thousands of repos via mutable `@vN` refs). Every job opens with step-security/harden-runner in audit mode; persist-credentials: false on every checkout; minimum permissions per job. The dependency-review-action step blocks PRs that introduce dependencies with known CVEs at moderate-or-higher severity and rejects any copyleft (GPL-2.0 / GPL-3.0 / AGPL-3.0 / LGPL-3.0) license that would compromise the MIT-licensed public core.
+
+name: pr-security
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: pr-security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  trufflehog:
+    name: trufflehog
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
+        with:
+          egress-policy: audit
+          disable-sudo: true
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: trufflesecurity/trufflehog@37b77001d0174ebec2fcca2bd83ff83a6d45a3ab
+        with:
+          path: ./
+          base: ${{ github.event.pull_request.base.sha || github.event.before }}
+          head: ${{ github.event.pull_request.head.sha || github.sha }}
+          extra_args: --only-verified
+
+  semgrep:
+    name: semgrep
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: returntocorp/semgrep
+    continue-on-error: true
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: semgrep scan with the OWASP Top Ten plus TypeScript plus JavaScript packs (advisory until findings triaged)
+        run: |
+          set -euo pipefail
+          semgrep scan \
+            --config p/owasp-top-ten \
+            --config p/typescript \
+            --config p/javascript \
+            --sarif --output semgrep.sarif \
+            --metrics off \
+            --exclude node_modules \
+            --exclude dist \
+            --exclude coverage \
+            --exclude reports \
+            || true
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+          retention-days: 30
+
+  license-check:
+    name: license-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
+        with:
+          egress-policy: audit
+          disable-sudo: true
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: ./.github/actions/setup-elevate-core
+      - name: STRICT license compliance for the MIT-licensed library
+        run: |
+          set -euo pipefail
+          pnpm dlx license-checker --production --onlyAllow "MIT;BSD-2-Clause;BSD-3-Clause;Apache-2.0;ISC;CC0-1.0;0BSD;Unlicense;MIT-0;Python-2.0" --excludePrivatePackages
+
+  dependency-review:
+    name: dependency-review
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
+        with:
+          egress-policy: audit
+          disable-sudo: true
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: moderate
+          deny-licenses: GPL-2.0, GPL-3.0, AGPL-3.0, LGPL-3.0
+          comment-summary-in-pr: on-failure

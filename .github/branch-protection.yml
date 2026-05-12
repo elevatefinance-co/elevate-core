@@ -1,0 +1,39 @@
+# Codified branch protection rules for `main`.
+#
+# Pre-launch posture (single solo committer, amend-on-main workflow). The rules below are minimal:
+# only the founder can push to main, force-pushes are allowed (the launch-prep workflow amends the
+# single v0.1 commit and force-pushes), and CI runs as informational signal but does NOT gate the
+# push. Status checks, required reviews, and signed commits are intentionally absent because there
+# is no second reviewer and no second committer pre-launch -- adding gates that only the same person
+# could satisfy is theatre.
+#
+# Re-tighten at launch:
+# 1. Restore `required_pull_request_reviews` (1 approving review, code-owner review, dismiss-stale).
+# 2. Restore `required_status_checks` (install / typecheck / lint / test-unit / audit /
+#    pr-conventional-commits / TruffleHog / Semgrep / license-check).
+# 3. Restore `required_signatures: true` once SSH-signing or GPG-signing is wired locally.
+# 4. Flip `allow_force_pushes: false`.
+# 5. Remove the founder from `restrictions.users` (or replace with a CODEOWNERS team).
+#
+# The repository admin applies these rules either through the GitHub Settings -> Branches ->
+# Branch protection rule UI for `main`, or by running `node scripts/apply-branch-protection.mjs`
+# which calls `gh api repos/:owner/:repo/branches/main/protection` with the JSON form of this
+# file. The script is idempotent.
+
+branches:
+  main:
+    required_pull_request_reviews: null
+    required_status_checks: null
+    required_signatures: false
+    required_linear_history: true
+    required_conversation_resolution: false
+    enforce_admins: false
+    allow_force_pushes: true
+    allow_deletions: false
+    block_creations: false
+    lock_branch: false
+    allow_fork_syncing: true
+    restrictions:
+      users: ['Priyesh-ElevateFinance']
+      teams: []
+      apps: []

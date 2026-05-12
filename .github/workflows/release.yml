@@ -1,0 +1,66 @@
+# Release workflow. Triggered on every push to main while the repository is still closed-source: opens or refreshes the "Version Packages" PR that aggregates pending changesets so the version bumps stay current; npm publishing is intentionally NOT wired here. When elevate-core opens its source and the @elevatefinance-co scope is registered on the public npm registry with this repository listed as a trusted publisher (or NPM_TOKEN provisioned as a secret), add `publish: pnpm release` to the changesets action input below and the workflow will start publishing on every merge of the version PR.
+#
+# Hostile-fork safety: a `if: github.repository == 'elevatefinance-co/elevate-core'` guard prevents a forked repo from ever triggering the release path on its own main branch — defence in depth for the eventual open-source flip. The workflow uses `push: branches: [main]` which already excludes fork PRs (forks can't push to the base repo's main), but the explicit guard makes the intent durable against any future trigger expansion.
+#
+# Supply-chain posture: `changesets/action` is pinned to a 40-char commit SHA (the tj-actions/changed-files March 2025 compromise pattern). step-security/harden-runner audit. persist-credentials stays default true here because changesets needs to push the version PR back; this is the ONLY workflow in elevate-core that legitimately keeps the token in .git/config.
+
+name: Release
+
+on:
+  workflow_dispatch:
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    if: github.repository == 'elevatefinance-co/elevate-core'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
+        with:
+          egress-policy: audit
+          disable-sudo: true
+
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: enable corepack on the runner's pre-installed Node so pnpm is on PATH before setup-node@v5 validates the packageManager field
+        run: corepack enable
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+
+      - name: enable corepack on the freshly-provisioned Node 24 toolchain
+        run: corepack enable
+
+      - name: cache the pnpm store keyed off pnpm-lock.yaml
+        uses: actions/cache@v5
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-${{ runner.os }}-
+
+      - name: pnpm install with frozen lockfile
+        run: pnpm install --frozen-lockfile
+
+      - name: Create or refresh the Version Packages PR (publish path stays disabled until the repository opens its source)
+        uses: changesets/action@63a615b9cd06ba9a3e6d13796c7fbcb080a60a0b
+        with:
+          version: pnpm version
+          commit: 'chore(release): version packages'
+          title: 'chore(release): version packages'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

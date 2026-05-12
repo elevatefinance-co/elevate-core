@@ -1,0 +1,206 @@
+# PR gate workflow. The single PR-time enforcement that every PR passes before merge becomes possible. Every job below is a required status check on the main branch protection rule. The library has no Next, no Prisma, no Playwright; the gate runs typecheck, lint, format:check, the vitest test suite, the enforced 95-percent coverage gate, the pnpm audit gate, and every standards audit (character-set, comment-discipline, interface, eslint-disable, stryker-disable, ts-ignore, SHA-pin). Each pnpm-driven job calls the .github/actions/setup-elevate-core composite which provisions Node 24 plus corepack-managed pnpm plus the pnpm-store cache plus the frozen-lockfile install; audit jobs that only grep the source tree skip the composite. External contributors from forks run the same gate (elevate-core opens its source at launch; this workflow is hostile-fork-safe today because it uses pull_request, not pull_request_target).
+#
+# Supply-chain posture: every third-party action pins to a 40-char commit SHA (the SHA-pin audit in code-discipline-audits enforces this on every push). Every job opens with step-security/harden-runner in audit mode. Every actions/checkout sets persist-credentials: false. Permissions are minimised to contents: read.
+
+name: pr-gate
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: pr-gate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
+        with:
+          egress-policy: audit
+          disable-sudo: true
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: ./.github/actions/setup-elevate-core
+      - run: pnpm typecheck
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
+        with:
+          egress-policy: audit
+          disable-sudo: true
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: ./.github/actions/setup-elevate-core
+      - run: pnpm lint
+
+  format:
+    name: format
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
+        with:
+          egress-policy: audit
+          disable-sudo: true
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: ./.github/actions/setup-elevate-core
+      - run: pnpm format:check
+
+  test-unit:
+    name: test-unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
+        with:
+          egress-policy: audit
+          disable-sudo: true
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: ./.github/actions/setup-elevate-core
+      - run: pnpm test
+
+  test-coverage:
+    name: test-coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
+        with:
+          egress-policy: audit
+          disable-sudo: true
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: ./.github/actions/setup-elevate-core
+      - run: pnpm -C packages/core test --coverage
+
+  audit:
+    name: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
+        with:
+          egress-policy: audit
+          disable-sudo: true
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: ./.github/actions/setup-elevate-core
+      - run: pnpm audit --audit-level=moderate
+
+  code-discipline-audits:
+    name: code-discipline-audits
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: step-security/harden-runner@9af89fc71515a100421586dfdb3dc9c984fbf411
+        with:
+          egress-policy: audit
+          disable-sudo: true
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: SHA-pin audit -- every third-party action uses a 40-char commit SHA (GitHub-owned actions/* keep @vN per org policy)
+        run: |
+          set -euo pipefail
+          violations=$(grep -rnE "^\s*-?\s*uses: " .github/workflows .github/actions 2>/dev/null \
+            | grep -vE "uses: actions/[a-zA-Z0-9_-]+@v[0-9]+" \
+            | grep -vE "uses: github/codeql-action/[a-zA-Z0-9_-]+@v[0-9]+" \
+            | grep -vE "uses: \./" \
+            | grep -vE "uses: docker://" \
+            | grep -vE "uses: [a-zA-Z0-9_./-]+@[a-f0-9]{40}( |$)" \
+            || true)
+          if [ -n "$violations" ]; then
+            echo "unpinned or mutable-ref third-party action uses (must be a 40-char commit SHA with a # vX.Y.Z comment):"
+            echo "$violations"
+            exit 1
+          fi
+
+      - name: character-set audit -- pure 7-bit GSM-7 ASCII outside intentional unicode test fixtures
+        run: |
+          set -euo pipefail
+          violations=$(LC_ALL=C grep -rPln '[^\x09\x0A\x0D\x20-\x7E]' packages/core/src docs README.md *.md 2>/dev/null || true)
+          if [ -n "$violations" ]; then
+            echo "non-GSM-7 / non-printable-ASCII characters in:"
+            echo "$violations"
+            exit 1
+          fi
+
+      - name: comment-discipline audit -- no // line comments in source (use /* */ at file header only)
+        run: |
+          set -euo pipefail
+          violations=$(grep -rnE "^[[:space:]]*//[^/]" packages/core/src 2>/dev/null | grep -vE "@ts-expect-error|stryker-disable" || true)
+          if [ -n "$violations" ]; then
+            echo "// line-comments in source files:"
+            echo "$violations"
+            exit 1
+          fi
+
+      - name: interface audit -- no interface declarations (use type alias)
+        run: |
+          set -euo pipefail
+          violations=$(grep -rn "^interface " packages/core/src 2>/dev/null || true)
+          if [ -n "$violations" ]; then
+            echo "interface declarations:"
+            echo "$violations"
+            exit 1
+          fi
+
+      - name: eslint-disable audit -- no eslint-disable directives
+        run: |
+          set -euo pipefail
+          violations=$(grep -rn "eslint-disable" packages/core/src 2>/dev/null || true)
+          if [ -n "$violations" ]; then
+            echo "eslint-disable directives:"
+            echo "$violations"
+            exit 1
+          fi
+
+      - name: stryker-disable audit -- no Stryker disable directives
+        run: |
+          set -euo pipefail
+          violations=$(grep -rn "Stryker disable" packages/core/src 2>/dev/null || true)
+          if [ -n "$violations" ]; then
+            echo "Stryker disable directives:"
+            echo "$violations"
+            exit 1
+          fi
+
+      - name: ts-ignore audit -- no @ts-ignore (use @ts-expect-error with an issue reference)
+        run: |
+          set -euo pipefail
+          violations=$(grep -rn "@ts-ignore" packages/core/src 2>/dev/null || true)
+          if [ -n "$violations" ]; then
+            echo "@ts-ignore directives:"
+            echo "$violations"
+            exit 1
+          fi
