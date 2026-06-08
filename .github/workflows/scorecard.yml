@@ -52,7 +52,7 @@ jobs:
           sarif_file: results.sarif
 
       - name: upload Scorecard SARIF as a workflow artefact for triage
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: scorecard-sarif
           path: results.sarif
