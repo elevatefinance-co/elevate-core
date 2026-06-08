@@ -28,7 +28,7 @@ jobs:
         with:
           egress-policy: audit
           disable-sudo: true
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -44,7 +44,7 @@ jobs:
         with:
           egress-policy: audit
           disable-sudo: true
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -60,7 +60,7 @@ jobs:
         with:
           egress-policy: audit
           disable-sudo: true
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -76,7 +76,7 @@ jobs:
         with:
           egress-policy: audit
           disable-sudo: true
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -92,7 +92,7 @@ jobs:
         with:
           egress-policy: audit
           disable-sudo: true
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -108,7 +108,7 @@ jobs:
         with:
           egress-policy: audit
           disable-sudo: true
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
           fetch-depth: 1
@@ -124,7 +124,7 @@ jobs:
         with:
           egress-policy: audit
           disable-sudo: true
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
           fetch-depth: 1
